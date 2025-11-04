@@ -29,8 +29,8 @@ inputs['Fit'] = st.selectbox("Fit", ['BOXY_FIT','OVERSIZE_FIT','REGULAR_FIT','BO
 inputs['Kumas_Eni'] = st.number_input(
     "Kumas_Eni",
     min_value=110.0,
-    max_value=190.0,
-    value=200.0) # Ba?lang?c de?eri
+    max_value=200.0,
+    value=180.0) # Ba?lang?c de?eri
 # Kuma? Gramaji 1 ile 30 aras?na s?n?rlama
 inputs['Kumas_Gramaji'] = st.number_input(
     "Kumas_Gramaji",
@@ -64,4 +64,5 @@ if st.button("Tahmin Et"):
 
     X_new_pool = Pool(X_new, cat_features=cat_features)
     prediction = model.predict(X_new_pool)[0]
+
     st.success(f"?? Tahmini Birim Sarfiyat: **{prediction:.2f}**")
