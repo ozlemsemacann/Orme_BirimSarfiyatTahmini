@@ -16,9 +16,9 @@ model = load_model()
 # -----------------------------
 # Streamlit Arayuzu
 # -----------------------------
-st.title("?? Birim Sarfiyat Tahmini")
+st.title("🧵Birim Sarfiyat Tahmini")
 
-st.markdown("Modeli onceden e?ittik ve yukledik. ?imdi de?erleri gir, tahmini al!")
+st.markdown("Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
 
 # Kullan?c?dan giri?ler
 inputs = {}
@@ -65,4 +65,5 @@ if st.button("Tahmin Et"):
 
     X_new_pool = Pool(X_new, cat_features=cat_features)
     prediction = model.predict(X_new_pool)[0]
+
     st.success(f"?? Tahmini Birim Sarfiyat: **{prediction:.2f}**")
