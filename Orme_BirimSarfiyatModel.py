@@ -1,68 +1,145 @@
 import streamlit as st
 import pandas as pd
-from catboost import CatBoostRegressor
+from catboost import CatBoostRegressor, Pool
+import os
 
-# -----------------------------
-# Modeli yukle
-# -----------------------------
+# -----------------------------------------------------------------------------
+# 1. AYARLAR VE DOSYA YÖNETİMİ
+# -----------------------------------------------------------------------------
+st.set_page_config(page_title="Örme Sarfiyat Tahmini", layout="wide")
+
+# Dosya yollarını dinamik bul
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# DİKKAT: Excel dosyanın adını buradakiyle aynı yapmalısın
+EXCEL_NAME = "Orme_Yuklenecek.xlsx"
+MODEL_NAME = "Orme_BirimSarfiyatModel.cbm"
+
+excel_path = os.path.join(current_dir, EXCEL_NAME)
+model_path = os.path.join(current_dir, MODEL_NAME)
+
+@st.cache_data
+def load_data():
+    if not os.path.exists(excel_path):
+        st.error(f"❌ Excel dosyası bulunamadı! Lütfen '{EXCEL_NAME}' adında bir dosyayı proje klasörüne yükle.")
+        return None
+    try:
+        df = pd.read_excel(excel_path)
+        return df
+    except Exception as e:
+        st.error(f"Excel okuma hatası: {e}")
+        return None
+
 @st.cache_resource
 def load_model():
+    if not os.path.exists(model_path):
+        st.error(f"❌ Model dosyası bulunamadı! ({MODEL_NAME})")
+        return None
     model = CatBoostRegressor()
-    model.load_model("Orme_BirimSarfiyatModel.cbm")
+    model.load_model(model_path)
     return model
 
+# Veri ve Modeli Yükle
+df = load_data()
 model = load_model()
 
-# -----------------------------
-# Streamlit Arayuzu
-# -----------------------------
-st.title("🧵 Birim Sarfiyat Tahmini")
+# Eğer veri yoksa durdur
+if df is None:
+    st.stop()
 
-st.markdown("Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
+# -----------------------------------------------------------------------------
+# 2. BASAMAKLI FİLTRELEME (CASCADING FILTERS)
+# -----------------------------------------------------------------------------
+st.title("🧶 Örme Birim Sarfiyat Tahmini")
+st.success(f"✅ '{EXCEL_NAME}' veri seti yüklendi. Filtreler birbirine bağlıdır.")
 
-# Kullan?c?dan giri?ler
 inputs = {}
-inputs['Departman'] = st.selectbox("Departman", ['Man'])
-inputs['Model_Turu'] = st.selectbox("Model_Turu", ['SHORT_SLEEVE_T-SHIRT','SWEAT_SHIRT'])
-inputs['Fit'] = st.selectbox("Fit", ['BOXY_FIT','LOOSE_FIT','REGULAR_FIT','NEW_REGULAR_FIT','RELAX_FIT','OVERSIZE_FIT','COMFORT_FIT','SLIM_FIT','STANDART_FIT','NEW_BOXY'])
-# Kuma? Eni De?erini 130 ile 176 aras?na s?n?rlama
-inputs['Kumas_Eni'] = st.number_input(
-    "Kumas_Eni",
-    min_value=110.0,
-    max_value=200.0,
-    value=180.0) # Ba?lang?c de?eri
-# Kuma? Gramaji 1 ile 30 aras?na s?n?rlama
-inputs['Kumas_Gramaji'] = st.number_input(
-    "Kumas_Gramaji",
-    min_value=110.0,
-    max_value=420.0,
-    value=150.0) # Ba?lang?c de?eri
-inputs['Pastal_Turu'] = st.selectbox("Pastal_Turu", ['Ana_Beden','Etek_Kol','Yaka','Kol','Etek_Kol_Yaka','Omuz','Kol_Yaka','Kapuson','Cep','Etek'])
-inputs['Asorti'] = st.selectbox("Asorti", ['XS(1),S(2),M(3),L(2),XL(1),XXL(1)','XS(1),S(2),M(3),L(3),XL(2),XXL(1),3XL(1)','XS(1),S(2),M(2),L(2),XL(1)','S(2),M(2),L(2),XL(2),XXL(1)','S(4),M(4),L(4),XL(4),XXL(2)','XS(1),S(2),M(2),L(2),XL(2),XXL(1)','XS(2),S(4),M(4),L(4),XL(4),XXL(2)','XS(1),S(1),M(2),L(2),XL(2),XXL(3),3XL(1),4XL(1)','XS(2),S(4),M(6),L(4),XL(2),XXL(2)','XS(4),S(6),M(6),L(6),XL(4)','XS(2),S(3),M(3),L(3),XL(2)','S(2),M(3),L(3),XL(2),XXL(1)','S(1),M(3),L(3),XL(3),XXL(2),3XL(1)','XS(1),S(2),M(3),L(1),XL(1)','XS(1),S(2),M(3),L(2),XL(1)','S(2),M(3),L(2),XL(1)','XS(2),S(2),M(2),L(2),XL(2),XXL(2)','XS(1),S(2),M(3),L(3),XL(2),XXL(1)','XS(1),S(2),M(3),L(3),XL(2),2XL(1),3XL(1)','XS(1),S(2),M(3),L(2),XL(2)','S(1),M(2),L(3),XL(2),XXL(1)','XS(2),S(3),M(3),L(2),XL(1),XXL(1)','XS(2),S(3),M(3),L(2),XL(1)','S(1),M(2),L(2),XL(1)','XS(1),S(2),M(2),L(2),XL(1),XXL(1)','XS(1),S(2),M(2),L(1)','S(2),M(3),L(3),XL(2),2XL(1)','S(1),M(2),L(3),XL(3),XXL(2),3XL(1)','S(2),M(3),L(2),XL(1),XXL(1)','XS(1),S(2),M(3),L(2),XL(2),XXL(1)','S(2),M(3),L(3),XL(2)','XS(1),S(3),M(3),L(2),XL(1)','S(1),M(2),L(2),XL(2),XXL(1)','S(1),M(2),L(2),XL(2),XXL(1),3XL(1)','S(1),M(2),L(2),XL(2),XXL(2)','XS(1),S(2),M(3),L(3),XL(2)','S(1),M(2),L(2),XL(1),XXL(1)','S(1),M(3),L(3),XL(2),XXL(1)','XS(1),S(2),M(3),L(3),XL(1),XXL(1)','XS(1),S(2),M(3),L(2),XL(2),XXL(2),3XL(1)','XS(1),S(2),M(3),L(3),XL(2),XXL(2),3XL(1)','XS(1),S(2),M(3),L(2),XL(2','3XL(6),4XL(4),5XL(2),6XL(1)','S(2),M(2),L(2)','S(6),M(9),L(9),XL(6),XXL(3)','S(3),M(6),L(6),XL(6),XXL(3)','S(6),M(6),L(6)','L(4),XL(4),XXL(4)','XS(2),S(4),M(6),L(4),XL(2)','L(2),XL(2),XXL(2)','XS(2),S(4),M(6),L(6),XL(4),XXL(2)','S(2),M(6),L(6),XL(6),XXL(4),3XL(2)','XS(2),S(4),M(4),L(4),XL(4),XXL(4),3XL(2)','M(10),L(10),XL(4)','S(6),L(2),XL(6),XXL(6),3XL(2)','S(6),M(2),L(2),XL(2),XXL(4),3XL(6)','XS(1),S(2),M(2),L(2),XL(2),XXL(2),3XL(1)','M(5),L(5),XL(2)','S(3),L(1),XL(3),XXL(3),3XL(1)','S(3),M(1),L(1),XL(1),XXL(2),3XL(3)','XS(1),S(2),M(4),L(2),XL(2),XXL(1)','XS(2),S(4),M(8),L(4),XL(4),XXL(2)','XS(2),S(1),M(1),L(8)','XS(2),S(3),M(2),L(2)','XS(4),S(2),M(2),L(16)','XS(4),S(6),M(4),L(4)','XS(1),S(1),M(1),L(1),XXL(1)','S(1),M(1),L(1),XL(1)','S(1),M(1),L(2),XL(2)','XS(1),S(1),M(2),L(3),XL(2),XXL(2)'])
-# Asorti Say?s? De?erini 1 ile 30 aras?na s?n?rlama
-inputs['Toplam_Asorti'] = st.number_input(
-    "Toplam_Asorti",
-    min_value=6.0,
-    max_value=14.0,
-    value=10.0) # Ba?lang?c de?eri
-# Parca Say?s? De?erini 1 ile 13 aras?na s?n?rlama
-inputs['Parca_Sayisi'] = st.number_input(
-    "Parca_Sayisi",
-    min_value=1.0,
-    max_value=13.0,
-    value=4.0) # Ba?lang?c de?eri
+st.markdown("---")
 
-# DataFrame olu?tur
-X_new = pd.DataFrame([inputs])
+col_left, col_right = st.columns([1, 1])
 
-# Tahmin
-if st.button("Tahmin Et"):
-    from catboost import Pool
+with col_left:
+    st.subheader("📋 Model Seçimi")
 
-    cat_features = ['Departman', 'Model_Turu', 'Fit',
-                    'Pastal_Turu', 'Asorti']
+    # 1. DEPARTMAN
+    # Veri setindeki Departman sütununu kullanıyoruz (Büyük/küçük harf veri setindekine göre gelir)
+    dept_list = sorted(df['Departman'].astype(str).unique())
+    secilen_dept = st.selectbox("Departman", dept_list)
+    inputs['Departman'] = secilen_dept
+    
+    # FİLTRE 1: Departmana göre daralt
+    df_step1 = df[df['Departman'] == secilen_dept]
 
-    X_new_pool = Pool(X_new, cat_features=cat_features)
-    prediction = model.predict(X_new_pool)[0]
+    # 2. MODEL TÜRÜ (Filtreli)
+    tur_list = sorted(df_step1['Model_Turu'].astype(str).unique())
+    secilen_tur = st.selectbox("Model_Turu", tur_list)
+    inputs['Model_Turu'] = secilen_tur
+    
+    # FİLTRE 2: Türe göre daralt
+    df_step2 = df_step1[df_step1['Model_Turu'] == secilen_tur]
 
-    st.success(f"🔮 Tahmini Birim Sarfiyat: **{prediction:.2f}**")
+    # 3. FIT (Filtreli)
+    fit_list = sorted(df_step2['Fit'].astype(str).unique())
+    secilen_fit = st.selectbox("Fit", fit_list)
+    inputs['Fit'] = secilen_fit
+
+    # FİLTRE 3: Fit'e göre daralt (Asorti için hazırlık)
+    df_step3 = df_step2[df_step2['Fit'] == secilen_fit]
+
+with col_right:
+    st.subheader("⚙️ Teknik Detaylar")
+
+    # 4. ASORTI (BAĞLI FİLTRE)
+    # Sadece seçilen Departman > Model > Fit kombinasyonunda olan asortileri getir
+    asorti_list = sorted(df_step3['Asorti'].astype(str).unique())
+    
+    # Eğer liste boş kalırsa (nadir durum), genel listeden getir
+    if not asorti_list:
+        asorti_list = sorted(df['Asorti'].astype(str).unique())
+        
+    inputs['Asorti'] = st.selectbox("Asorti", asorti_list)
+
+    # 5. PASTAL TÜRÜ (Genel listeden veya filtreliden gelebilir, genel tercih ettim)
+    inputs['Pastal_Turu'] = st.selectbox("Pastal_Turu", sorted(df['Pastal_Turu'].astype(str).unique()))
+
+    # SAYISAL GİRİŞLER
+    c1, c2 = st.columns(2)
+    inputs['Kumas_Eni'] = c1.number_input("Kumas_Eni", 110.0, 200.0, 180.0)
+    inputs['Kumas_Gramaji'] = c2.number_input("Kumas_Gramaji", 110.0, 420.0, 150.0)
+    
+    c3, c4 = st.columns(2)
+    inputs['Toplam_Asorti'] = c3.number_input("Toplam_Asorti", 6.0, 14.0, 10.0)
+    inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, 4.0)
+
+# -----------------------------------------------------------------------------
+# 3. HESAPLAMA
+# -----------------------------------------------------------------------------
+st.divider()
+
+if st.button("HESAPLA", type="primary", use_container_width=True):
+    if model:
+        try:
+            # Girdilerden DataFrame oluştur
+            X_new = pd.DataFrame([inputs])
+            
+            # --- OTOMATİK SIRALAMA (HATA ÖNLEYİCİ) ---
+            # Modelin beklediği sütun sırasını al ve veriyi ona göre diz.
+            # Bu işlem "At position X..." hatalarını kesin çözer.
+            beklenen_siralama = model.feature_names_
+            X_new = X_new[beklenen_siralama]
+
+            # Kategorik özellikler (Örme modeline göre)
+            cat_features = ['Departman', 'Model_Turu', 'Fit', 'Pastal_Turu', 'Asorti']
+            
+            X_new_pool = Pool(X_new, cat_features=cat_features)
+            prediction = model.predict(X_new_pool)[0]
+            
+            st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**") # Örme genelde kg veya mt olabilir, birimi kontrol et.
+            
+        except KeyError as e:
+            st.error(f"Sütun Hatası: Model '{e}' isimli bir veri bekliyor ama kodda bu isim eksik.")
+        except Exception as e:
+            st.error(f"Hesaplama Hatası: {e}")
+            st.info("İpucu: Excel dosyasındaki sütun isimlerinin model eğitimiyle aynı olduğundan emin ol.")
+    else:
+        st.error("Model yüklenemedi.")
