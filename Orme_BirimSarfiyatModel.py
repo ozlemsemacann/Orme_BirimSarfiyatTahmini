@@ -51,7 +51,7 @@ if df is None:
 # 2. BASAMAKLI FİLTRELEME (CASCADING FILTERS)
 # -----------------------------------------------------------------------------
 st.title("🧶 Örme Birim Sarfiyat Tahmini")
-st.success(f"✅ Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!)
+st.success(f"✅ Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
 
 inputs = {}
 st.markdown("---")
@@ -143,5 +143,6 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
             st.info("İpucu: Excel dosyasındaki sütun isimlerinin model eğitimiyle aynı olduğundan emin ol.")
     else:
         st.error("Model yüklenemedi.")
+
 
 
