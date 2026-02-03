@@ -1,2 +1,0 @@
-# Orme_BirimSarfiyatTahmini
-Ormebirimsarfiyathesaplamadeposu
