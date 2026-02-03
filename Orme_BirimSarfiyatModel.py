@@ -12,7 +12,7 @@ st.set_page_config(page_title="Örme Sarfiyat Tahmini", layout="wide")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 # DİKKAT: Excel dosyanın adını buradakiyle aynı yapmalısın
-EXCEL_NAME = "Orme_Yuklenecek.xlsx"
+EXCEL_NAME = "Orme_BirimSarfiyat_Yuklenecek.xlsx"
 MODEL_NAME = "Orme_BirimSarfiyatModel.cbm"
 
 excel_path = os.path.join(current_dir, EXCEL_NAME)
@@ -143,3 +143,4 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
             st.info("İpucu: Excel dosyasındaki sütun isimlerinin model eğitimiyle aynı olduğundan emin ol.")
     else:
         st.error("Model yüklenemedi.")
+
