@@ -8,7 +8,10 @@ import os
 # -----------------------------------------------------------------------------
 st.set_page_config(page_title="Örme Sarfiyat Tahmini", layout="wide")
 
+# Dosya yollarını dinamik bul
 current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# DİKKAT: Excel dosyanın adını buradakiyle aynı yapmalısın
 EXCEL_NAME = "Orme_BirimSarfiyat_Yuklenecek.xlsx"
 MODEL_NAME = "Orme_BirimSarfiyatModel.cbm"
 
@@ -40,9 +43,11 @@ def load_model():
         st.error(f"Model yükleme hatası: {e}")
         return None
 
+# Veri ve Modeli Yükle
 df = load_data()
 model = load_model()
 
+# Eğer veri yoksa durdur
 if df is None or model is None:
     st.stop()
 
@@ -50,7 +55,7 @@ if df is None or model is None:
 # 2. BASAMAKLI FİLTRELEME (CASCADING FILTERS)
 # -----------------------------------------------------------------------------
 st.title("🧶 Örme Birim Sarfiyat Tahmini")
-st.success(f"✅ Model ve Veri Hazır! Seçimleri yaparak tahmini alabilirsiniz.")
+st.success(f"✅ Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
 
 inputs = {}
 st.markdown("---")
@@ -64,24 +69,33 @@ with col_left:
     dept_list = sorted(df['Departman'].astype(str).unique())
     secilen_dept = st.selectbox("Departman", dept_list)
     inputs['Departman'] = secilen_dept
+    
+    # FİLTRE 1: Departmana göre daralt
     df_step1 = df[df['Departman'] == secilen_dept]
 
     # 2. MODEL TÜRÜ
     tur_list = sorted(df_step1['Model_Turu'].astype(str).unique())
     secilen_tur = st.selectbox("Model_Turu", tur_list)
     inputs['Model_Turu'] = secilen_tur
+    
+    # FİLTRE 2: Türe göre daralt
     df_step2 = df_step1[df_step1['Model_Turu'] == secilen_tur]
 
-    # 3. MODEL DETAYI
+    # 3. MODEL DETAYI (YENİ EKLENEN ADIM)
+    # Filtrelenmiş 2. adımdan Model Detaylarını getiriyoruz
     detay_list = sorted(df_step2['Model_Detayi'].astype(str).unique())
     secilen_detay = st.selectbox("Model_Detayi", detay_list)
     inputs['Model_Detayi'] = secilen_detay
+    
+    # FİLTRE 3: Model Detayına göre daralt
     df_step3 = df_step2[df_step2['Model_Detayi'] == secilen_detay]
 
     # 4. FIT
     fit_list = sorted(df_step3['Fit'].astype(str).unique())
     secilen_fit = st.selectbox("Fit", fit_list)
     inputs['Fit'] = secilen_fit
+
+    # FİLTRE 4: Fit'e göre daralt (Asorti için hazırlık)
     df_step4 = df_step3[df_step3['Fit'] == secilen_fit]
 
 with col_right:
@@ -91,17 +105,11 @@ with col_right:
     asorti_list = sorted(df_step4['Asorti'].astype(str).unique())
     if not asorti_list:
         asorti_list = sorted(df['Asorti'].astype(str).unique())
+        
     inputs['Asorti'] = st.selectbox("Asorti", asorti_list)
 
     # 6. PASTAL TÜRÜ 
     inputs['Pastal_Turu'] = st.selectbox("Pastal_Turu", sorted(df['Pastal_Turu'].astype(str).unique()))
-
-    # --- DINAMIK PARCA SAYISI HESAPLAMA ---
-    if not df_step3.empty and 'Parca_Sayisi' in df_step3.columns:
-        # Ortalama değeri alıyoruz
-        hesaplanan_parca = float(round(df_step3['Parca_Sayisi'].mean(), 1))
-    else:
-        hesaplanan_parca = 4.0 
 
     # SAYISAL GİRİŞLER
     c1, c2 = st.columns(2)
@@ -109,17 +117,8 @@ with col_right:
     inputs['Kumas_Gramaji'] = c2.number_input("Kumas_Gramaji", 110.0, 420.0, 150.0)
     
     c3, c4 = st.columns(2)
-    inputs['Toplam_Asorti'] = c3.number_input("Toplam_Asorti", 1.0, 50.0, 10.0)
-    
-    # KUTUNUN GÜNCELLENMESİNİ SAĞLAYAN ANAHTAR: key=f"parca_{secilen_detay}"
-    # Bu sayede Model_Detayi her değiştiğinde bu input kutusu kendini resetler.
-    inputs['Parca_Sayisi'] = c4.number_input(
-        "Parca_Sayisi", 
-        1.0, 50.0, 
-        value=hesaplanan_parca, 
-        step=1.0,
-        key=f"parca_{secilen_detay}"
-    )
+    inputs['Toplam_Asorti'] = c3.number_input("Toplam_Asorti", 6.0, 14.0, 10.0)
+    inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, 4.0)
 
 # -----------------------------------------------------------------------------
 # 3. HESAPLAMA
@@ -132,30 +131,24 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
             # Girdilerden DataFrame oluştur
             X_new = pd.DataFrame([inputs])
             
-            # Modelin beklediği özellik sıralamasını al
+            # --- OTOMATİK SIRALAMA ---
             beklenen_siralama = model.feature_names_
             X_new = X_new[beklenen_siralama]
 
-            # Kategorik özellikler listesi
+            # Kategorik özellikler listesine Model_Detayi EKLENDİ
             cat_features = ['Departman', 'Model_Turu', 'Model_Detayi', 'Fit', 'Pastal_Turu', 'Asorti']
             
             X_new_pool = Pool(X_new, cat_features=cat_features)
             
-            # Tahmin al
+            # Numpy Array format hatasını çözen indeksleme
             prediction = model.predict(X_new_pool)[0]
             
-            # Sonuç Ekranı
-            st.balloons()
-            st.markdown(f"""
-            <div style="text-align: center; padding: 25px; border: 2px solid #4CAF50; border-radius: 15px; background-color: #f9f9f9;">
-                <h3 style="margin: 0; color: #555;">Tahmini Birim Sarfiyat</h3>
-                <h1 style="color: #4CAF50; font-size: 60px; margin: 10px 0;">{prediction:.3f} <span style="font-size: 20px;">kg</span></h1>
-            </div>
-            """, unsafe_allow_html=True)
+            st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**")
             
+        except KeyError as e:
+            st.error(f"Sütun Hatası: Model {e} isimli bir veri bekliyor ama kodda bu isim eksik veya yanlış yazılmış.")
         except Exception as e:
-            st.error(f"❌ Bir hata oluştu: {e}")
+            st.error(f"Hesaplama Hatası: {e}")
+            st.info("İpucu: Excel dosyasındaki sütun isimlerinin harf büyüklüklerinin kodla ('Model_Detayi' gibi) aynı olduğundan emin olun.")
     else:
-        st.error("Model yüklenemedi.")
-
-# Yapmamı istediğin başka bir ekleme var mı?
+        st.error("Model yüklenemediği için hesaplama yapılamıyor.")
