@@ -59,9 +59,13 @@ with col_left:
     secilen_tur = st.selectbox("Model Türü", tur_list)
     df_step2 = df_step1[df_step1['Model_Turu'] == secilen_tur]
 
+    detay_list = sorted(df_step1['Model_Detayi'].unique())
+    secilen_tur = st.selectbox("Model Fetayi", tur_list)
+    df_step2 = df_step2[df_step2['Model_Detayi'] == secilen_tur]
+
     fit_list = sorted(df_step2['Fit'].unique())
     secilen_fit = st.selectbox("Fit", fit_list)
-    df_step3 = df_step2[df_step2['Fit'] == secilen_fit]
+    df_step4 = df_step3[df_step3['Fit'] == secilen_fit]
 
     # --- OTOMATİK PARÇA SAYISI HESAPLAMA ---
     # Seçilen kriterlere uyan verilerin ortalama parça sayısını al
@@ -129,3 +133,4 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
             st.error(f"Hata: {e}")
     else:
         st.error("Model dosyası yüklenemediği için hesaplama yapılamıyor.")
+
