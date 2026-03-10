@@ -3,15 +3,10 @@ import pandas as pd
 from catboost import CatBoostRegressor, Pool
 import os
 
-# -----------------------------------------------------------------------------
 # 1. AYARLAR VE DOSYA YÖNETİMİ
-# -----------------------------------------------------------------------------
 st.set_page_config(page_title="Örme Sarfiyat Tahmini", layout="wide")
 
-# Dosya yollarını dinamik bul
 current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# DİKKAT: Excel dosyanın adını buradakiyle aynı yapmalısın
 EXCEL_NAME = "Orme_BirimSarfiyat_Yuklenecek.xlsx"
 MODEL_NAME = "Orme_BirimSarfiyatModel.cbm"
 
@@ -39,110 +34,98 @@ def load_model():
     model.load_model(model_path)
     return model
 
-# Veri ve Modeli Yükle
 df = load_data()
 model = load_model()
 
-# Eğer veri yoksa durdur
 if df is None:
     st.stop()
 
-# -----------------------------------------------------------------------------
-# 2. BASAMAKLI FİLTRELEME (CASCADING FILTERS)
-# -----------------------------------------------------------------------------
-st.title("🧶 Örme Birim Sarfiyat Tahmini")
-st.success(f"✅ Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
-
-inputs = {}
+# 2. FİLTRELEME VE OTOMATİK HESAPLAMA
+st.title("🧶 Örme Birim Sarfiyat Tahmini (Otomatik Parametreli)")
 st.markdown("---")
 
+inputs = {}
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
     st.subheader("📋 Model Seçimi")
-
-    # 1. DEPARTMAN
-    # Veri setindeki Departman sütununu kullanıyoruz (Büyük/küçük harf veri setindekine göre gelir)
-    dept_list = sorted(df['Departman'].astype(str).unique())
-    secilen_dept = st.selectbox("Departman", dept_list)
-    inputs['Departman'] = secilen_dept
     
-    # FİLTRE 1: Departmana göre daralt
+    # Kademeli Filtreleme
+    dept_list = sorted(df['Departman'].unique())
+    secilen_dept = st.selectbox("Departman", dept_list)
     df_step1 = df[df['Departman'] == secilen_dept]
 
-    # 2. MODEL TÜRÜ (Filtreli)
-    tur_list = sorted(df_step1['Model_Turu'].astype(str).unique())
-    secilen_tur = st.selectbox("Model_Turu", tur_list)
-    inputs['Model_Turu'] = secilen_tur
-    
-    # FİLTRE 2: Türe göre daralt
+    tur_list = sorted(df_step1['Model_Turu'].unique())
+    secilen_tur = st.selectbox("Model Türü", tur_list)
     df_step2 = df_step1[df_step1['Model_Turu'] == secilen_tur]
 
-    # 3. FIT (Filtreli)
-    fit_list = sorted(df_step2['Fit'].astype(str).unique())
+    fit_list = sorted(df_step2['Fit'].unique())
     secilen_fit = st.selectbox("Fit", fit_list)
-    inputs['Fit'] = secilen_fit
-
-    # FİLTRE 3: Fit'e göre daralt (Asorti için hazırlık)
     df_step3 = df_step2[df_step2['Fit'] == secilen_fit]
+
+    # --- OTOMATİK PARÇA SAYISI HESAPLAMA ---
+    # Seçilen kriterlere uyan verilerin ortalama parça sayısını al
+    if not df_step3.empty:
+        otomatik_parca = round(df_step3['Parca_Sayisi'].mean())
+    else:
+        otomatik_parca = round(df['Parca_Sayisi'].mean())
+    
+    st.info(f"💡 Seçilen modele göre önerilen Parça Sayısı: **{otomatik_parca}**")
+    inputs['Parca_Sayisi'] = otomatik_parca
 
 with col_right:
     st.subheader("⚙️ Teknik Detaylar")
 
-    # 4. ASORTI (BAĞLI FİLTRE)
-    # Sadece seçilen Departman > Model > Fit kombinasyonunda olan asortileri getir
-    asorti_list = sorted(df_step3['Asorti'].astype(str).unique())
-    
-    # Eğer liste boş kalırsa (nadir durum), genel listeden getir
+    # ASORTİ SEÇİMİ
+    asorti_list = sorted(df_step3['Asorti'].unique())
     if not asorti_list:
-        asorti_list = sorted(df['Asorti'].astype(str).unique())
-        
-    inputs['Asorti'] = st.selectbox("Asorti", asorti_list)
-
-    # 5. PASTAL TÜRÜ (Genel listeden veya filtreliden gelebilir, genel tercih ettim)
-    inputs['Pastal_Turu'] = st.selectbox("Pastal_Turu", sorted(df['Pastal_Turu'].astype(str).unique()))
-
-    # SAYISAL GİRİŞLER
-    c1, c2 = st.columns(2)
-    inputs['Kumas_Eni'] = c1.number_input("Kumas_Eni", 110.0, 200.0, 180.0)
-    inputs['Kumas_Gramaji'] = c2.number_input("Kumas_Gramaji", 110.0, 420.0, 150.0)
+        asorti_list = sorted(df['Asorti'].unique())
     
-    c3, c4 = st.columns(2)
-    inputs['Toplam_Asorti'] = c3.number_input("Toplam_Asorti", 6.0, 14.0, 10.0)
-    inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, 4.0)
+    secilen_asorti_adi = st.selectbox("Asorti Tipi", asorti_list)
+    inputs['Asorti'] = secilen_asorti_adi
 
-# -----------------------------------------------------------------------------
+    # --- OTOMATİK TOPLAM ASORTİ HESAPLAMA ---
+    # Seçilen asorti adına karşılık gelen sayısal Toplam_Asorti değerini bul
+    toplam_asorti_degeri = df[df['Asorti'] == secilen_asorti_adi]['Toplam_Asorti'].iloc[0]
+    st.info(f"🔢 Seçilen asortinin toplam içeriği: **{toplam_asorti_degeri}**")
+    inputs['Toplam_Asorti'] = toplam_asorti_degeri
+
+    inputs['Pastal_Turu'] = st.selectbox("Pastal Türü", sorted(df['Pastal_Turu'].unique()))
+
+    c1, c2 = st.columns(2)
+    inputs['Kumas_Eni'] = c1.number_input("Kumaş Eni", 110.0, 200.0, 180.0)
+    inputs['Kumas_Gramaji'] = c2.number_input("Kumaş Gramajı", 110.0, 420.0, 150.0)
+
 # 3. HESAPLAMA
-# -----------------------------------------------------------------------------
 st.divider()
+
+# Modelin beklediği diğer sütunları (Departman vb.) inputs sözlüğüne ekle
+inputs['Departman'] = secilen_dept
+inputs['Model_Turu'] = secilen_tur
+inputs['Fit'] = secilen_fit
 
 if st.button("HESAPLA", type="primary", use_container_width=True):
     if model:
         try:
-            # Girdilerden DataFrame oluştur
+            # DataFrame oluştur
             X_new = pd.DataFrame([inputs])
             
-            # --- OTOMATİK SIRALAMA (HATA ÖNLEYİCİ) ---
-            # Modelin beklediği sütun sırasını al ve veriyi ona göre diz.
-            # Bu işlem "At position X..." hatalarını kesin çözer.
+            # Modelin eğitimdeki sütun sırasını zorla (Hata almamak için) 
             beklenen_siralama = model.feature_names_
             X_new = X_new[beklenen_siralama]
 
-            # Kategorik özellikler (Örme modeline göre)
-            cat_features = ['Departman', 'Model_Turu', 'Fit', 'Pastal_Turu', 'Asorti']
+            # Kategorik değişkenleri modelin tanıması için listele
+            cat_features = [col for col in X_new.columns if X_new[col].dtype == 'object']
             
             X_new_pool = Pool(X_new, cat_features=cat_features)
             prediction = model.predict(X_new_pool)[0]
             
-            st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**") # Örme genelde kg veya mt olabilir, birimi kontrol et.
+            st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**")
             
-        except KeyError as e:
-            st.error(f"Sütun Hatası: Model '{e}' isimli bir veri bekliyor ama kodda bu isim eksik.")
+            # Seçilen otomatik değerleri özetle
+            st.write(f"*(Hesaplamada kullanılan otomatik değerler: Parça Sayısı: {inputs['Parca_Sayisi']}, Toplam Asorti: {inputs['Toplam_Asorti']})*")
+            
         except Exception as e:
-            st.error(f"Hesaplama Hatası: {e}")
-            st.info("İpucu: Excel dosyasındaki sütun isimlerinin model eğitimiyle aynı olduğundan emin ol.")
+            st.error(f"Hata: {e}")
     else:
-        st.error("Model yüklenemedi.")
-
-
-
+        st.error("Model dosyası yüklenemediği için hesaplama yapılamıyor.")
