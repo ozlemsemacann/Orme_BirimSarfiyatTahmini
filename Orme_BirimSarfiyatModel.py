@@ -50,27 +50,30 @@ col_left, col_right = st.columns([1, 1])
 with col_left:
     st.subheader("📋 Model Seçimi")
     
-    # Kademeli Filtreleme
+    # Kademeli Filtreleme - Adım 1: Departman
     dept_list = sorted(df['Departman'].unique())
     secilen_dept = st.selectbox("Departman", dept_list)
     df_step1 = df[df['Departman'] == secilen_dept]
 
+    # Kademeli Filtreleme - Adım 2: Model Türü
     tur_list = sorted(df_step1['Model_Turu'].unique())
     secilen_tur = st.selectbox("Model Türü", tur_list)
     df_step2 = df_step1[df_step1['Model_Turu'] == secilen_tur]
 
-    detay_list = sorted(df_step1['Model_Detayi'].unique())
-    secilen_tur = st.selectbox("Model Fetayi", tur_list)
-    df_step2 = df_step2[df_step2['Model_Detayi'] == secilen_tur]
+    # Kademeli Filtreleme - Adım 3: Model Detayı (DÜZELTİLDİ)
+    detay_list = sorted(df_step2['Model_Detayi'].unique())
+    secilen_detay = st.selectbox("Model Detayı", detay_list)
+    df_step3 = df_step2[df_step2['Model_Detayi'] == secilen_detay]
 
-    fit_list = sorted(df_step2['Fit'].unique())
+    # Kademeli Filtreleme - Adım 4: Fit (DÜZELTİLDİ)
+    fit_list = sorted(df_step3['Fit'].unique())
     secilen_fit = st.selectbox("Fit", fit_list)
     df_step4 = df_step3[df_step3['Fit'] == secilen_fit]
 
     # --- OTOMATİK PARÇA SAYISI HESAPLAMA ---
-    # Seçilen kriterlere uyan verilerin ortalama parça sayısını al
-    if not df_step3.empty:
-        otomatik_parca = round(df_step3['Parca_Sayisi'].mean())
+    # En son filtrelenmiş veri setine (df_step4) göre ortalamayı al
+    if not df_step4.empty:
+        otomatik_parca = round(df_step4['Parca_Sayisi'].mean())
     else:
         otomatik_parca = round(df['Parca_Sayisi'].mean())
     
@@ -81,7 +84,7 @@ with col_right:
     st.subheader("⚙️ Teknik Detaylar")
 
     # ASORTİ SEÇİMİ
-    asorti_list = sorted(df_step3['Asorti'].unique())
+    asorti_list = sorted(df_step4['Asorti'].unique())
     if not asorti_list:
         asorti_list = sorted(df['Asorti'].unique())
     
@@ -89,8 +92,13 @@ with col_right:
     inputs['Asorti'] = secilen_asorti_adi
 
     # --- OTOMATİK TOPLAM ASORTİ HESAPLAMA ---
-    # Seçilen asorti adına karşılık gelen sayısal Toplam_Asorti değerini bul
-    toplam_asorti_degeri = df[df['Asorti'] == secilen_asorti_adi]['Toplam_Asorti'].iloc[0]
+    # Seçilen asorti adına karşılık gelen sayısal Toplam_Asorti değerini çek
+    asorti_verisi = df[df['Asorti'] == secilen_asorti_adi]
+    if not asorti_verisi.empty:
+        toplam_asorti_degeri = asorti_verisi['Toplam_Asorti'].iloc[0]
+    else:
+        toplam_asorti_degeri = 0
+
     st.info(f"🔢 Seçilen asortinin toplam içeriği: **{toplam_asorti_degeri}**")
     inputs['Toplam_Asorti'] = toplam_asorti_degeri
 
@@ -103,34 +111,34 @@ with col_right:
 # 3. HESAPLAMA
 st.divider()
 
-# Modelin beklediği diğer sütunları (Departman vb.) inputs sözlüğüne ekle
+# Seçilen tüm değerleri inputs sözlüğüne aktar
 inputs['Departman'] = secilen_dept
 inputs['Model_Turu'] = secilen_tur
+inputs['Model_Detayi'] = secilen_detay
 inputs['Fit'] = secilen_fit
 
 if st.button("HESAPLA", type="primary", use_container_width=True):
     if model:
         try:
-            # DataFrame oluştur
+            # Girdilerden DataFrame oluştur
             X_new = pd.DataFrame([inputs])
             
-            # Modelin eğitimdeki sütun sırasını zorla (Hata almamak için) 
+            # Modelin beklediği sütunları (cbm dosyasındaki sıra ile) al 
             beklenen_siralama = model.feature_names_
-            X_new = X_new[beklenen_siralama]
+            
+            # Eksik sütun kontrolü (Model_Detayi modelde yoksa bile kodun çökmesini engeller)
+            X_new = X_new[[c for c in beklenen_siralama if c in X_new.columns]]
 
-            # Kategorik değişkenleri modelin tanıması için listele
+            # Kategorik değişkenleri belirle
             cat_features = [col for col in X_new.columns if X_new[col].dtype == 'object']
             
             X_new_pool = Pool(X_new, cat_features=cat_features)
             prediction = model.predict(X_new_pool)[0]
             
             st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**")
-            
-            # Seçilen otomatik değerleri özetle
-            st.write(f"*(Hesaplamada kullanılan otomatik değerler: Parça Sayısı: {inputs['Parca_Sayisi']}, Toplam Asorti: {inputs['Toplam_Asorti']})*")
+            st.write(f"*(Otomatik Parametreler -> Parça Sayısı: {inputs['Parca_Sayisi']}, Toplam Asorti: {inputs['Toplam_Asorti']})*")
             
         except Exception as e:
-            st.error(f"Hata: {e}")
+            st.error(f"Hesaplama sırasında bir hata oluştu: {e}")
     else:
-        st.error("Model dosyası yüklenemediği için hesaplama yapılamıyor.")
-
+        st.error("Model yüklenemediği için hesaplama yapılamıyor.")
