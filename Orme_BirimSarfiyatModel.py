@@ -173,7 +173,7 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
         with st.spinner('Bilgilendirme maili gönderiliyor...'):
             basarili = send_notification_email(prediction, inputs)
             if basarili:
-                st.info("✉️ Bilgilendirme maili Özlem Hanım'a iletildi.")
+                st.info("✉️ Bilgilendirme maili iletildi.")
 
     except KeyError as e:
         st.error(f"Sütun Hatası: Model {e} isimli bir veri bekliyor ama kodda eksik veya yanlış yazılmış.")
