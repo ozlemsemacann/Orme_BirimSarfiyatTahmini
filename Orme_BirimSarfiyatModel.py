@@ -65,7 +65,7 @@ def send_notification_email(prediction_result, user_inputs):
         msg = MIMEMultipart()
         msg['From'] = sender_email
         msg['To'] = receiver_email
-        msg['Subject'] = "🔔 Yeni Birim Sarfiyat Hesaplaması Yapıldı"
+        msg['Subject'] = f"🔔 Yeni Birim Sarfiyat Hesaplaması - Model: {user_inputs.get('Manuel_Model_Kodu', 'Belirtilmedi')}"
 
         body = f"""
         Merhaba,
@@ -77,6 +77,7 @@ def send_notification_email(prediction_result, user_inputs):
         ------------------------------------------
         
         GİRİLEN VERİLER:
+        - Manuel Model Kodu: {user_inputs.get('Manuel_Model_Kodu', 'Belirtilmedi')}
         - Departman: {user_inputs.get('Departman', '-')}
         - Model Türü: {user_inputs.get('Model_Turu', '-')}
         - Model Detayı: {user_inputs.get('Model_Detayi', '-')}
@@ -113,12 +114,17 @@ st.title("🧶 Örme Birim Sarfiyat Tahmini")
 st.success("✅ Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
 
 inputs = {}
+
+# --- MANUEL MODEL KODU ALANI ---
+st.subheader("📝 Model Bilgisi")
+inputs['Manuel_Model_Kodu'] = st.text_input("Model Kodu Giriniz", placeholder="Örn: TS-12345-ABC")
 st.markdown("---")
 
+# ALT FİLTRELER
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
-    st.subheader("📋 Model Seçimi")
+    st.subheader("📋 Kategori Seçimi")
     secilen_dept = st.selectbox("Departman", sorted(df['Departman'].astype(str).unique()))
     inputs['Departman'] = secilen_dept
     
@@ -161,7 +167,9 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
     try:
         # 1. Tahmin İşlemi
         X_new = pd.DataFrame([inputs])
-        X_new = X_new[model.feature_names_]  # Otomatik sıralama
+        
+        # Sadece modelin beklediği sütunları seç (Manuel_Model_Kodu dışarıda kalır)
+        X_new = X_new[model.feature_names_]  
         
         cat_features = ['Departman', 'Model_Turu', 'Model_Detayi', 'Fit', 'Pastal_Turu', 'Asorti']
         X_new_pool = Pool(X_new, cat_features=cat_features)
