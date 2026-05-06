@@ -177,7 +177,7 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
         st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**")
 
         # 2. Google Sheets Kayıt İşlemi
-        if conn:
+        if conn is not None:
             try:
                 existing_data = conn.read(worksheet="Sheet1")
                 new_row_data = inputs.copy()
@@ -190,7 +190,7 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
                 conn.update(worksheet="Sheet1", data=updated_df)
                 st.info("📊 Tahmin verileri ve girişler Google Sheets'e kaydedildi.")
             except Exception as e:
-                st.error(f"Google Sheets'e kayıt sırasında hata: Lütfen Tablo formatını ve Secrets yetkilerini kontrol edin.")
+                st.error(f"Google Sheets'e kayıt sırasında hata: Lütfen Tablo formatını ve Secrets yetkilerini kontrol edin. Hata detayı: {e}")
         else:
             st.warning("Google Sheets bağlantısı kurulamadığı için veri kaydedilemedi.")
 
