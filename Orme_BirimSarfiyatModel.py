@@ -6,7 +6,6 @@ from datetime import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from streamlit_gsheets import GSheetsConnection
 
 # -----------------------------------------------------------------------------
 # 1. AYARLAR VE DOSYA YÖNETİMİ
@@ -46,12 +45,6 @@ def load_model():
 
 df = load_data()
 model = load_model()
-
-# Google Sheets Bağlantısı (Secrets ayarlarınız yoksa hata vermesin diye try-except içine alındı)
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception:
-    conn = None
 
 if df is None or model is None:
     st.stop()
@@ -160,7 +153,7 @@ with col_right:
     inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, 4.0)
 
 # -----------------------------------------------------------------------------
-# 3. HESAPLAMA, KAYIT VE MAİL İŞLEMİ
+# 3. HESAPLAMA VE MAİL İŞLEMİ
 # -----------------------------------------------------------------------------
 st.divider()
 
@@ -176,25 +169,7 @@ if st.button("HESAPLA", type="primary", use_container_width=True):
         
         st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**")
 
-        # 2. Google Sheets Kayıt İşlemi
-        if conn is not None:
-            try:
-                existing_data = conn.read(worksheet="Sheet1")
-                new_row_data = inputs.copy()
-                new_row_data['Tarih'] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-                new_row_data['Tahmin_Sonucu'] = round(prediction, 4)
-                
-                new_row_df = pd.DataFrame([new_row_data])
-                updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
-                
-                conn.update(worksheet="Sheet1", data=updated_df)
-                st.info("📊 Tahmin verileri ve girişler Google Sheets'e kaydedildi.")
-            except Exception as e:
-                st.error(f"Google Sheets'e kayıt sırasında hata: Lütfen Tablo formatını ve Secrets yetkilerini kontrol edin. Hata detayı: {e}")
-        else:
-            st.warning("Google Sheets bağlantısı kurulamadığı için veri kaydedilemedi.")
-
-        # 3. Mail Gönderme İşlemi
+        # 2. Mail Gönderme İşlemi
         with st.spinner('Bilgilendirme maili gönderiliyor...'):
             basarili = send_notification_email(prediction, inputs)
             if basarili:
