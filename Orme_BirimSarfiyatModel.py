@@ -3,6 +3,9 @@ import pandas as pd
 from catboost import CatBoostRegressor, Pool
 import os
 from datetime import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from streamlit_gsheets import GSheetsConnection
 
 # -----------------------------------------------------------------------------
@@ -20,7 +23,7 @@ model_path = os.path.join(current_dir, MODEL_NAME)
 @st.cache_data
 def load_data():
     if not os.path.exists(excel_path):
-        st.error(f"❌ Excel dosyası bulunamadı!")
+        st.error(f"❌ Excel dosyası bulunamadı! Lütfen '{EXCEL_NAME}' adında bir dosyayı proje klasörüne yükle.")
         return None
     try:
         return pd.read_excel(excel_path)
@@ -31,7 +34,7 @@ def load_data():
 @st.cache_resource
 def load_model():
     if not os.path.exists(model_path):
-        st.error(f"❌ Model dosyası bulunamadı!")
+        st.error(f"❌ Model dosyası bulunamadı! ({MODEL_NAME})")
         return None
     try:
         model = CatBoostRegressor()
@@ -41,13 +44,74 @@ def load_model():
         st.error(f"Model yükleme hatası: {e}")
         return None
 
-# Veri, Model ve Google Sheets Bağlantısı
 df = load_data()
 model = load_model()
-conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Google Sheets Bağlantısı (Secrets ayarlarınız yoksa hata vermesin diye try-except içine alındı)
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except Exception:
+    conn = None
 
 if df is None or model is None:
     st.stop()
+
+# -----------------------------------------------------------------------------
+# MAİL GÖNDERME FONKSİYONU
+# -----------------------------------------------------------------------------
+def send_notification_email(prediction_result, user_inputs):
+    try:
+        # Secrets'tan bilgileri çek (Hata verirse secrets eksiktir)
+        smtp_server = st.secrets["email"]["smtp_server"]
+        port = st.secrets["email"]["port"]
+        sender_email = st.secrets["email"]["sender_email"]
+        password = st.secrets["email"]["password"]
+        receiver_email = "ozlem.semacan@defacto.com"
+
+        # Mail İçeriğini Hazırla
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = receiver_email
+        msg['Subject'] = "🔔 Yeni Birim Sarfiyat Hesaplaması Yapıldı"
+
+        body = f"""
+        Merhaba,
+        
+        Uygulama üzerinden yeni bir hesaplama yapıldı. Detaylar aşağıdadır:
+        
+        ------------------------------------------
+        🔮 TAHMİN SONUCU: {prediction_result:.3f} kg
+        ------------------------------------------
+        
+        GİRİLEN VERİLER:
+        - Departman: {user_inputs.get('Departman', '-')}
+        - Model Türü: {user_inputs.get('Model_Turu', '-')}
+        - Model Detayı: {user_inputs.get('Model_Detayi', '-')}
+        - Fit: {user_inputs.get('Fit', '-')}
+        - Asorti: {user_inputs.get('Asorti', '-')}
+        - Pastal Türü: {user_inputs.get('Pastal_Turu', '-')}
+        - Kumaş Eni: {user_inputs.get('Kumas_Eni', '-')}
+        - Kumaş Gramajı: {user_inputs.get('Kumas_Gramaji', '-')}
+        - Toplam Asorti: {user_inputs.get('Toplam_Asorti', '-')}
+        - Parça Sayısı: {user_inputs.get('Parca_Sayisi', '-')}
+        
+        Tarih: {datetime.now().strftime("%d-%m-%Y %H:%M:%S")}
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Maili Gönder
+        server = smtplib.SMTP(smtp_server, port)
+        server.starttls()
+        server.login(sender_email, password)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except KeyError:
+        st.error("Mail gönderilemedi: Streamlit 'Secrets' içinde [email] ayarları bulunamadı.")
+        return False
+    except Exception as e:
+        st.error(f"Mail gönderme hatası: {e}")
+        return False
 
 # -----------------------------------------------------------------------------
 # 2. ARAYÜZ VE FİLTRELEME
@@ -57,6 +121,7 @@ st.success("✅ Sistem Hazır. Değerleri girip hesapla butonuna basınız.")
 
 inputs = {}
 st.markdown("---")
+
 col_left, col_right = st.columns([1, 1])
 
 with col_left:
@@ -80,7 +145,9 @@ with col_left:
 with col_right:
     st.subheader("⚙️ Teknik Detaylar")
     asorti_list = sorted(df_step4['Asorti'].astype(str).unique())
-    if not asorti_list: asorti_list = sorted(df['Asorti'].astype(str).unique())
+    if not asorti_list: 
+        asorti_list = sorted(df['Asorti'].astype(str).unique())
+        
     inputs['Asorti'] = st.selectbox("Asorti", asorti_list)
     inputs['Pastal_Turu'] = st.selectbox("Pastal_Turu", sorted(df['Pastal_Turu'].astype(str).unique()))
 
@@ -93,36 +160,47 @@ with col_right:
     inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, 4.0)
 
 # -----------------------------------------------------------------------------
-# 3. HESAPLAMA VE KAYIT
+# 3. HESAPLAMA, KAYIT VE MAİL İŞLEMİ
 # -----------------------------------------------------------------------------
 st.divider()
 
 if st.button("HESAPLA", type="primary", use_container_width=True):
     try:
-        # Tahmin İşlemi
+        # 1. Tahmin İşlemi
         X_new = pd.DataFrame([inputs])
-        X_new = X_new[model.feature_names_]
+        X_new = X_new[model.feature_names_]  # Otomatik sıralama
+        
         cat_features = ['Departman', 'Model_Turu', 'Model_Detayi', 'Fit', 'Pastal_Turu', 'Asorti']
         X_new_pool = Pool(X_new, cat_features=cat_features)
         prediction = model.predict(X_new_pool)[0]
         
         st.success(f"🧶 Tahmini Birim Sarfiyat: **{prediction:.3f} kg**")
 
-        # --- GOOGLE SHEETS KAYIT BÖLÜMÜ ---
-        # 1. Mevcut veriyi oku
-        existing_data = conn.read(worksheet="Sheet1")
-        
-        # 2. Yeni satırı hazırla (Tarih ve Sonuç ekleyerek)
-        new_row_data = inputs.copy()
-        new_row_data['Tarih'] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        new_row_data['Tahmin_Sonucu'] = round(prediction, 4)
-        new_row_df = pd.DataFrame([new_row_data])
-        
-        # 3. Eski veriyle birleştir ve güncelle
-        updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
-        conn.update(worksheet="Sheet1", data=updated_df)
-        
-        st.info("📊 Tahmin verileri ve girişler Google Sheets'e kaydedildi.")
+        # 2. Google Sheets Kayıt İşlemi
+        if conn:
+            try:
+                existing_data = conn.read(worksheet="Sheet1")
+                new_row_data = inputs.copy()
+                new_row_data['Tarih'] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                new_row_data['Tahmin_Sonucu'] = round(prediction, 4)
+                
+                new_row_df = pd.DataFrame([new_row_data])
+                updated_df = pd.concat([existing_data, new_row_df], ignore_index=True)
+                
+                conn.update(worksheet="Sheet1", data=updated_df)
+                st.info("📊 Tahmin verileri ve girişler Google Sheets'e kaydedildi.")
+            except Exception as e:
+                st.error(f"Google Sheets'e kayıt sırasında hata: Lütfen Tablo formatını ve Secrets yetkilerini kontrol edin.")
+        else:
+            st.warning("Google Sheets bağlantısı kurulamadığı için veri kaydedilemedi.")
 
+        # 3. Mail Gönderme İşlemi
+        with st.spinner('Bilgilendirme maili gönderiliyor...'):
+            basarili = send_notification_email(prediction, inputs)
+            if basarili:
+                st.info("✉️ Bilgilendirme maili Özlem Hanım'a iletildi.")
+
+    except KeyError as e:
+        st.error(f"Sütun Hatası: Model {e} isimli bir veri bekliyor ama kodda eksik veya yanlış yazılmış.")
     except Exception as e:
-        st.error(f"Hata oluştu: {e}")
+        st.error(f"Hesaplama sırasında hata oluştu: {e}")
