@@ -110,7 +110,7 @@ def send_notification_email(prediction_result, user_inputs):
 # 2. ARAYÜZ VE FİLTRELEME
 # -----------------------------------------------------------------------------
 st.title("🧶 Örme Birim Sarfiyat Tahmini")
-st.success("✅ Sistem Hazır. Değerleri girip hesapla butonuna basınız.")
+st.success("✅ Modeli önceden eğittik ve yükledik. Şimdi değerleri gir, tahmini al!")
 
 inputs = {}
 st.markdown("---")
