@@ -154,9 +154,31 @@ with col_right:
     inputs['Kumas_Eni'] = c1.number_input("Kumas_Eni", 110.0, 200.0, 180.0)
     inputs['Kumas_Gramaji'] = c2.number_input("Kumas_Gramaji", 110.0, 420.0, 150.0)
     
+    # -------------------------------------------------------------------------
+    # ORTALAMA PARCA SAYISI HESAPLAMA (Anlık Çalışır)
+    # -------------------------------------------------------------------------
+    mask = (
+        (df['Departman'] == inputs['Departman']) &
+        (df['Model_Turu'] == inputs['Model_Turu']) &
+        (df['Model_Detayi'] == inputs['Model_Detayi']) &
+        (df['Fit'] == inputs['Fit']) &
+        (df['Pastal_Turu'] == inputs['Pastal_Turu'])
+    )
+    
+    avg_parca = df[mask]['Parca_Sayisi'].mean()
+    
+    if pd.isna(avg_parca):
+        default_parca = 4.0 # Önceki koddaki varsayılan 4.0 değeri kullanıldı
+        st.warning("⚠️ Bu kombinasyona ait geçmiş veri bulunamadı. Varsayılan değer atanıyor.")
+    else:
+        default_parca = float(round(avg_parca))
+        # number_input limitleri içinde tut (1.0 ile 13.0 arası)
+        default_parca = max(1.0, min(13.0, default_parca))
+        st.info(f"💡 Seçtiğiniz kriterlere göre geçmiş ortalama parça sayısı **{default_parca}** olarak hesaplandı.")
+
     c3, c4 = st.columns(2)
     inputs['Toplam_Asorti'] = c3.number_input("Toplam_Asorti", 6.0, 14.0, 10.0)
-    inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, 4.0)
+    inputs['Parca_Sayisi'] = c4.number_input("Parca_Sayisi", 1.0, 13.0, value=default_parca)
 
 # -----------------------------------------------------------------------------
 # 3. HESAPLAMA VE MAİL İŞLEMİ
